@@ -2,18 +2,42 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from io import BytesIO
+import os
 from pathlib import Path
 from threading import Lock
 
 import torch
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import APIRouter, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, UnidentifiedImageError
 from torch import nn
 from torchvision import transforms
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-MODEL_PATH = BASE_DIR / "pneumonia_cnn.pt"
+BACKEND_DIR = Path(__file__).resolve().parent
+REPO_DIR = BACKEND_DIR.parent
+MODEL_FILENAME = "pneumonia_cnn.pt"
+# Public path prefix. On Vercel the top-level rewrite `/api/(.*)` forwards the
+# original path unchanged, so every route must live under this prefix.
+API_PREFIX = "/api"
+
+
+def resolve_model_path() -> Path:
+    """Find the checkpoint.
+
+    Order: $MODEL_PATH, then backend/pneumonia_cnn.pt (the only location that is
+    bundled when the backend is deployed as its own Vercel service), then the repo
+    root (legacy local layout used by start-backend.bat).
+    """
+    override = os.environ.get("MODEL_PATH")
+    candidates = [Path(override)] if override else []
+    candidates += [BACKEND_DIR / MODEL_FILENAME, REPO_DIR / MODEL_FILENAME]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return candidates[0]
+
+
+MODEL_PATH = resolve_model_path()
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 
@@ -73,6 +97,8 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="PneumoniaCNN API", version="1.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
+    # Only needed for split local dev (Next.js on :3000 calling uvicorn on :8000).
+    # On Vercel both services share one origin, so the browser never sends a CORS preflight.
     # Any port on localhost / 127.0.0.1 / private LAN IPs (Next.js may start on 3001, 3002, ...)
     allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?",
     allow_methods=["GET", "POST"],
@@ -80,12 +106,15 @@ app.add_middleware(
 )
 
 
-@app.get("/health")
+router = APIRouter(prefix=API_PREFIX)
+
+
+@router.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ready" if model is not None else "model_not_loaded"}
 
 
-@app.post("/predict")
+@router.post("/predict")
 async def predict(file: UploadFile = File(...)) -> dict[str, object]:
     global model
     if model is None:
@@ -125,6 +154,9 @@ async def predict(file: UploadFile = File(...)) -> dict[str, object]:
         "threshold": threshold,
         "model": "PneumoniaCNN",
     }
+
+
+app.include_router(router)
 
 
 if __name__ == "__main__":
