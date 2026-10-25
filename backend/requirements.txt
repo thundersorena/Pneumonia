@@ -1,10 +1,8 @@
-# CPU-only PyTorch wheels. The default PyPI wheels for Linux pull in CUDA
-# libraries (several GB), far over the Vercel Python function size limit.
---extra-index-url https://download.pytorch.org/whl/cpu
-
+# Serving dependencies only. Inference runs in NumPy (see inference.py), so
+# torch/torchvision are not needed here — they pushed the Vercel bundle to 830 MB.
+# Install torch separately only if you want to retrain the model.
 fastapi>=0.115,<1.0
+numpy>=1.26
 pillow>=10.0
 python-multipart>=0.0.9
-torch>=2.2
-torchvision>=0.17
 uvicorn[standard]>=0.30

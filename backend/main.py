@@ -1,36 +1,39 @@
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 from io import BytesIO
-import os
 from pathlib import Path
-from threading import Lock
 
-import torch
+import numpy as np
 from fastapi import APIRouter, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, UnidentifiedImageError
-from torch import nn
-from torchvision import transforms
+
+try:  # `uvicorn backend.main:app` from the repo root (start-backend.bat)
+    from .inference import forward, load_checkpoint, preprocess, softmax
+except ImportError:  # `main:app` with backend/ as the root (Vercel service, `python main.py`)
+    from inference import forward, load_checkpoint, preprocess, softmax
 
 BACKEND_DIR = Path(__file__).resolve().parent
 REPO_DIR = BACKEND_DIR.parent
-MODEL_FILENAME = "pneumonia_cnn.pt"
+MODEL_FILENAMES = ("pneumonia_cnn.pt", "pneumonia_cnn.npz")
 # Public path prefix. On Vercel the top-level rewrite `/api/(.*)` forwards the
 # original path unchanged, so every route must live under this prefix.
 API_PREFIX = "/api"
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 
 def resolve_model_path() -> Path:
     """Find the checkpoint.
 
-    Order: $MODEL_PATH, then backend/pneumonia_cnn.pt (the only location that is
-    bundled when the backend is deployed as its own Vercel service), then the repo
-    root (legacy local layout used by start-backend.bat).
+    Order: $MODEL_PATH, then backend/ (the only folder bundled when the backend is
+    deployed as its own Vercel service), then the repo root (legacy local layout).
     """
     override = os.environ.get("MODEL_PATH")
     candidates = [Path(override)] if override else []
-    candidates += [BACKEND_DIR / MODEL_FILENAME, REPO_DIR / MODEL_FILENAME]
+    for directory in (BACKEND_DIR, REPO_DIR):
+        candidates += [directory / name for name in MODEL_FILENAMES]
     for candidate in candidates:
         if candidate.is_file():
             return candidate
@@ -38,53 +41,15 @@ def resolve_model_path() -> Path:
 
 
 MODEL_PATH = resolve_model_path()
-MAX_IMAGE_BYTES = 10 * 1024 * 1024
-
-
-class PneumoniaCNN(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        self.conv1 = nn.Conv2d(1, 16, kernel_size=3, padding=1)
-        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1)
-        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.fc1 = nn.Linear(32 * 7 * 7, 64)
-        self.fc2 = nn.Linear(64, 2)
-
-    def forward(self, image: torch.Tensor) -> torch.Tensor:
-        image = self.pool1(torch.relu(self.conv1(image)))
-        image = self.pool2(torch.relu(self.conv2(image)))
-        image = torch.flatten(image, start_dim=1)
-        image = torch.relu(self.fc1(image))
-        return self.fc2(image)
-
-
-
-preprocess = transforms.Compose(
-    [
-        transforms.Resize((28, 28)),
-        transforms.ToTensor(),
-    ]
-)
-model: PneumoniaCNN | None = None
+weights: dict[str, np.ndarray] | None = None
 threshold = 0.3
-model_lock = Lock()
 
 
 def load_model() -> None:
-    global model, threshold
+    global weights, threshold
     if not MODEL_PATH.is_file():
         raise RuntimeError(f"Model checkpoint not found: {MODEL_PATH}")
-
-    checkpoint = torch.load(MODEL_PATH, map_location="cpu", weights_only=True)
-    if not isinstance(checkpoint, dict) or "model_state_dict" not in checkpoint:
-        raise RuntimeError("Checkpoint must contain a model_state_dict.")
-
-    loaded_model = PneumoniaCNN()
-    loaded_model.load_state_dict(checkpoint["model_state_dict"], strict=True)
-    loaded_model.eval()
-    model = loaded_model
-    threshold = float(checkpoint.get("threshold", 0.3))
+    weights, threshold = load_checkpoint(MODEL_PATH)
     print(f"[PneumoniaCNN] model loaded from {MODEL_PATH} (threshold={threshold})")
 
 
@@ -94,7 +59,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="PneumoniaCNN API", version="1.1.0", lifespan=lifespan)
+app = FastAPI(title="PneumoniaCNN API", version="1.2.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     # Only needed for split local dev (Next.js on :3000 calling uvicorn on :8000).
@@ -105,19 +70,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 router = APIRouter(prefix=API_PREFIX)
 
 
 @router.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ready" if model is not None else "model_not_loaded"}
+    return {"status": "ready" if weights is not None else "model_not_loaded"}
 
 
 @router.post("/predict")
 async def predict(file: UploadFile = File(...)) -> dict[str, object]:
-    global model
-    if model is None:
+    if weights is None:
         raise HTTPException(status_code=503, detail="مدل هنوز بارگذاری نشده است.")
     if file.content_type not in {"image/jpeg", "image/png"}:
         raise HTTPException(status_code=415, detail="فرمت تصویر باید JPG یا PNG باشد.")
@@ -130,16 +93,15 @@ async def predict(file: UploadFile = File(...)) -> dict[str, object]:
 
     try:
         with Image.open(BytesIO(contents)) as source:
-            image = preprocess(source.convert("L")).unsqueeze(0)
+            image = preprocess(source)
     except (UnidentifiedImageError, OSError) as error:
         raise HTTPException(status_code=400, detail="فایل ارسال‌شده یک تصویر معتبر نیست.") from error
 
-    with model_lock, torch.inference_mode():
-        logits = model(image)
-        probabilities = torch.softmax(logits, dim=1)[0]
+    # Pure function over read-only weights: safe to run concurrently, no lock needed.
+    probabilities = softmax(forward(weights, image))
 
-    normal_probability = float(probabilities[0].item())
-    pneumonia_probability = float(probabilities[1].item())
+    normal_probability = float(probabilities[0])
+    pneumonia_probability = float(probabilities[1])
     label = "Pneumonia" if pneumonia_probability >= threshold else "Normal"
     confidence = pneumonia_probability if label == "Pneumonia" else normal_probability
 
