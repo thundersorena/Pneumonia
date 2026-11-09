@@ -15,7 +15,10 @@ type Prediction = {
 
 type ServiceStatus = "checking" | "ready" | "offline";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+// Same-origin by default: on Vercel (and under `vercel dev`) the top-level rewrite
+// `/api/(.*)` routes to the backend service. Set NEXT_PUBLIC_API_URL only when the
+// API runs on a different origin, e.g. http://127.0.0.1:8000/api with start.bat.
+const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "/api").replace(/\/+$/, "");
 const MAX_BYTES = 10 * 1024 * 1024;
 const ACCEPTED = ["image/jpeg", "image/png"];
 const START_COMMAND = "python -m uvicorn backend.main:app --reload";
