@@ -157,7 +157,7 @@
 }
 
 .slide-frame {
-  width: min(100cqw, 100cqh * 16 / 9);
+  width: min(100cqw, 177.7778cqh);
   aspect-ratio: 16 / 9;
   border-radius: 14px;
   box-shadow:
