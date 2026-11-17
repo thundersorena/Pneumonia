@@ -22,7 +22,8 @@ export function PresentationDeck() {
   const [elapsed, setElapsed] = useState(0);
   const [running, setRunning] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const touchX = useRef<number | null>(null);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const hashReady = useRef(false);
 
   const slide = slides[index];
@@ -131,19 +132,28 @@ export function PresentationDeck() {
     return () => window.removeEventListener("keydown", onKey);
   }, [go, next, prev, toggleFullscreen]);
 
-  /* swipe (RTL: swipe right → next) */
+  /* swipe (RTL: swipe right → next). Only clearly horizontal gestures change
+     the slide, so vertical scrolling of tall mobile slides never flips it. */
   function onTouchStart(event: TouchEvent) {
-    touchX.current = event.touches[0]?.clientX ?? null;
+    const t = event.touches[0];
+    touchStart.current = t ? { x: t.clientX, y: t.clientY } : null;
   }
   function onTouchEnd(event: TouchEvent) {
-    if (touchX.current === null) return;
-    const dx = (event.changedTouches[0]?.clientX ?? touchX.current) - touchX.current;
-    if (Math.abs(dx) > 50) {
-      if (dx > 0) next();
-      else prev();
-    }
-    touchX.current = null;
+    const start = touchStart.current;
+    touchStart.current = null;
+    const t = event.changedTouches[0];
+    if (!start || !t) return;
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (Math.abs(dx) < 80 || Math.abs(dx) < Math.abs(dy) * 2.5) return;
+    if (dx > 0) next();
+    else prev();
   }
+
+  /* a new slide always starts at its top */
+  useEffect(() => {
+    stageRef.current?.scrollTo({ top: 0 });
+  }, [index]);
 
   const plannedUntilNow = slides.slice(0, index + 1).reduce((s, x) => s + x.seconds, 0);
   const drift = elapsed - plannedUntilNow;
@@ -189,7 +199,7 @@ export function PresentationDeck() {
 
       {/* ---------- stage ---------- */}
       <main className="deck-main">
-        <div className="deck-stage" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+        <div ref={stageRef} className="deck-stage" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
           <div className="slide-frame" aria-roledescription="اسلاید" aria-label={`اسلاید ${fa(index + 1)} از ${fa(total)}: ${slide.title}`}>
             <div className="slide-scale" key={slide.id}>
               <SlideView slide={slide} index={index} total={total} />

@@ -3714,6 +3714,8 @@
     overflow-x: hidden;
     overflow-y: auto;
     container-type: inline-size;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
     -webkit-overflow-scrolling: touch;
   }
 
