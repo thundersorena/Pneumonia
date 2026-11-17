@@ -23,6 +23,7 @@ export function PresentationDeck() {
   const [running, setRunning] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const touchX = useRef<number | null>(null);
+  const hashReady = useRef(false);
 
   const slide = slides[index];
 
@@ -42,6 +43,10 @@ export function PresentationDeck() {
   }, []);
 
   useEffect(() => {
+    if (!hashReady.current) {
+      hashReady.current = true;
+      return;
+    }
     const target = `#${index + 1}`;
     if (window.location.hash !== target) window.history.replaceState(null, "", target);
   }, [index]);

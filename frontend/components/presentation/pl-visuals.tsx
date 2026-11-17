@@ -1,45 +1,4 @@
-import type { ReactNode } from "react";
 import { fa } from "@/lib/format";
-
-/* ------------------------------------------------------------------ */
-/*  Tiny syntax highlighter (Python / TypeScript snippets only)        */
-/* ------------------------------------------------------------------ */
-
-const TOKEN =
-  /(#.*$|\/\/.*$)|("[^"]*"|'[^']*')|(@[\w.]+)|\b(def|class|return|async|await|with|from|import|raise|as|type|const|let|if|in|None|self|true|false|null)\b|\b(\d+(?:\.\d+)?)\b/g;
-
-function highlight(line: string): ReactNode[] {
-  const out: ReactNode[] = [];
-  let last = 0;
-  let m: RegExpExecArray | null;
-  TOKEN.lastIndex = 0;
-  while ((m = TOKEN.exec(line)) !== null) {
-    if (m.index > last) out.push(line.slice(last, m.index));
-    const cls = m[1] ? "tk-com" : m[2] ? "tk-str" : m[3] ? "tk-dec" : m[4] ? "tk-kw" : "tk-num";
-    out.push(<span key={m.index} className={cls}>{m[0]}</span>);
-    last = m.index + m[0].length;
-  }
-  if (last < line.length) out.push(line.slice(last));
-  return out;
-}
-
-function Code({ lang, lines, mark = [] }: { lang: string; lines: string[]; mark?: number[] }) {
-  return (
-    <div className="pl-code" dir="ltr">
-      <span className="pl-code-lang">{lang}</span>
-      <pre>
-        {lines.map((line, i) => (
-          <code key={i} className={mark.includes(i) ? "is-mark" : undefined}>
-            {highlight(line)}
-            {"\n"}
-          </code>
-        ))}
-      </pre>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 
 const languages = [
   { name: "TypeScript / TSX", role: "رابط کاربری", typing: "ایستا · ساختاری · تدریجی", run: "ترجمه به JS · نوع‌ها پاک می‌شوند", paradigm: "اعلانی (React) + رویدادمحور" },
@@ -82,42 +41,40 @@ export function PlMapVisual() {
 export function PlDslVisual() {
   return (
     <div className="pl-dsl">
-      <Code
-        lang="Python · PyTorch"
-        mark={[2, 3]}
-        lines={[
-          "def forward(self, image):",
-          "    # plain Python syntax, tensor semantics",
-          "    image = self.pool1(torch.relu(self.conv1(image)))",
-          "    image = self.pool2(torch.relu(self.conv2(image)))",
-          "    image = torch.flatten(image, start_dim=1)",
-          "    return self.fc2(torch.relu(self.fc1(image)))",
-          "",
-          "logits = model(image)   # __call__ → forward",
-          "loss.backward()         # reverse-mode autodiff",
-        ]}
-      />
+      <div className="pl-steps">
+        <div className="pl-step">
+          <span className="pl-step-n">{fa(1)}</span>
+          <strong>همان Python</strong>
+          <p>مدل با نحو معمولی نوشته می‌شود: لایه‌ها پشت سر هم صدا زده می‌شوند.</p>
+        </div>
+        <div className="pl-step">
+          <span className="pl-step-n">{fa(2)}</span>
+          <strong>گراف هنگام اجرا</strong>
+          <p>هر محاسبه ثبت می‌شود تا بعداً بشود از خروجی به عقب برگشت و یاد گرفت.</p>
+        </div>
+        <div className="pl-step">
+          <span className="pl-step-n">{fa(3)}</span>
+          <strong>یادگیری خودکار</strong>
+          <p>با یک دستور، سیستم می‌فهمد هر وزن چقدر باید تغییر کند.</p>
+        </div>
+      </div>
       <div className="pl-graph" dir="ltr">
-        {["conv1", "relu", "pool1", "conv2", "relu", "pool2", "flatten", "fc1", "fc2"].map((n, i) => (
+        {["تصویر", "کانولوشن", "ReLU", "Pool", "کانولوشن", "Pool", "تصمیم"].map((n, i) => (
           <span key={`${n}-${i}`}>{n}</span>
         ))}
       </div>
-      <div className="pl-arrows">
-        <span className="is-fwd">← forward: گراف هم‌زمان با اجرا ساخته می‌شود</span>
-        <span className="is-bwd">backward: گرادیان از انتها به ابتدا →</span>
-      </div>
       <div className="pl-modes">
         <div>
-          <b>Eager</b>
-          <small>مثل مفسر · دیباگ آسان · if و for معمولی</small>
+          <b>اجرای عادی</b>
+          <small>مثل مفسر · خط‌به‌خط · خطایابی آسان</small>
         </div>
         <div>
-          <b dir="ltr">torch.compile</b>
-          <small>مثل JIT · گرفتن گراف · کد بهینه</small>
+          <b>torch.compile</b>
+          <small>مثل کامپایلر · سریع‌تر</small>
         </div>
         <div className="is-old">
-          <b>TF 1.x</b>
-          <small>Define-and-run · اول گراف، بعد اجرا</small>
+          <b>روش قدیمی</b>
+          <small>اول گراف، بعد اجرا</small>
         </div>
       </div>
     </div>
@@ -127,58 +84,48 @@ export function PlDslVisual() {
 export function PlTypesVisual() {
   return (
     <div className="pl-types">
-      <div className="pl-types-grid">
-        <Code
-          lang="TypeScript · فرانت‌اند"
-          mark={[1, 6]}
-          lines={[
-            "type Prediction = {",
-            '  prediction: "Normal" | "Pneumonia";',
-            "  probabilities: { Normal: number; ... };",
-            "  threshold: number;",
-            "};",
-            "",
-            "const r = (await res.json()) as Prediction;",
-            'if ("detail" in r) { /* narrowing */ }',
-          ]}
-        />
-        <div className="pl-boundary">
-          <span>JSON</span>
-          <small>نوع‌ها اینجا پاک می‌شوند</small>
+      <div className="pl-steps">
+        <div className="pl-step">
+          <span className="pl-step-n">{fa(1)}</span>
+          <strong>داخل برنامه</strong>
+          <p>هر مقدار برچسب دارد و اشتباه پیش از اجرا گرفته می‌شود.</p>
+          <div className="pl-chips" dir="ltr">
+            <i className="is-ok">&quot;Pneumonia&quot; ✓</i>
+            <i className="is-no">&quot;pneumonia&quot; ✗</i>
+          </div>
         </div>
-        <Code
-          lang="Python · بک‌اند"
-          mark={[0, 4]}
-          lines={[
-            "model: PneumoniaCNN | None = None",
-            "",
-            '@app.post("/predict")',
-            "async def predict(",
-            "    file: UploadFile = File(...),",
-            ") -> dict[str, object]:",
-            "    ...",
-            "",
-            "self.fc1 = nn.Linear(32 * 7 * 7, 64)  # 1568",
-          ]}
-        />
+        <div className="pl-step is-break">
+          <span className="pl-step-n">{fa(2)}</span>
+          <strong>عبور از شبکه</strong>
+          <p>فقط متن ساده می‌رسد؛ برچسب‌ها اینجا پاک می‌شوند.</p>
+          <div className="pl-chips" dir="ltr">
+            <i className="is-json">JSON</i>
+          </div>
+        </div>
+        <div className="pl-step">
+          <span className="pl-step-n">{fa(3)}</span>
+          <strong>آن‌سوی مرز</strong>
+          <p>باید دوباره بررسی کنیم، نه اینکه فقط باور کنیم.</p>
+          <div className="pl-chips">
+            <i className="is-ok">بررسی هنگام اجرا</i>
+          </div>
+        </div>
       </div>
       <div className="pl-type-notes">
-        <span className="is-good"><b>Literal Union</b> مقدار نامعتبر در زمان کامپایل رد می‌شود</span>
-        <span className="is-bad"><b dir="ltr">as</b> ادعا است، نه بررسی؛ سیستم نوع ناسالم</span>
-        <span className="is-good"><b>Reflection</b> FastAPI از type hint اعتبارسنجی می‌سازد</span>
-        <span className="is-bad"><b>Shape</b> ۱۵۶۸ فقط در زمان اجرا چک می‌شود</span>
+        <span className="is-good"><b>خوب است:</b> اشتباه تایپی در نام برچسب، پیش از اجرا دیده می‌شود.</span>
+        <span className="is-bad"><b>خطرناک است:</b> اگر به کامپایلر بگوییم «اعتماد کن» و سرور چیز دیگری بفرستد، خطا دیر پیدا می‌شود.</span>
       </div>
     </div>
   );
 }
 
 const features = [
-  { concept: "Decorator", fa: "تابع مرتبه‌بالا · فرابرنامه‌نویسی", lang: "Python", code: ['@app.post("/predict")', "async def predict(file): ..."], note: "معادل predict = app.post(...)(predict)" },
-  { concept: "Context Manager", fa: "مدیریت منبع (شبیه RAII) · حوزه‌ی پویا", lang: "Python", code: ["with model_lock, torch.inference_mode():", "    logits = model(image)"], note: "قفل و حالت بدون‌گراد حتماً آزاد می‌شوند" },
-  { concept: "async / await", fa: "هم‌روال · حلقه‌ی رویداد", lang: "Python + TS", code: ["contents = await file.read(MAX + 1)", "const res = await fetch(url)"], note: "هم‌روندی همکارانه، نه موازی" },
-  { concept: "Closure", fa: "بستار · چرخه‌ی عمر", lang: "TypeScript", code: ["let active = true;", "return () => { active = false; };"], note: "پاسخ دیررس بعد از unmount نادیده گرفته می‌شود" },
-  { concept: "Composition", fa: "ترکیب توابع · سبک تابعی", lang: "Python", code: ["preprocess = transforms.Compose(", "    [Resize((28, 28)), ToTensor()])"], note: "خط لوله‌ی پیش‌پردازش از توابع کوچک" },
-  { concept: "Exception chaining", fa: "مدیریت خطا · حفظ علت", lang: "Python", code: ["except UnidentifiedImageError as error:", "    raise HTTPException(400) from error"], note: "علت اصلی در __cause__ باقی می‌ماند" },
+  { concept: "دکوراتور", en: "Decorator", text: "برچسبی بالای تابع که می‌گوید: این تابع جواب درخواست‌های تشخیص را می‌دهد." },
+  { concept: "مدیریت منبع", en: "with", text: "مثل دری که خودش بسته می‌شود؛ قفل مدل حتی هنگام خطا هم آزاد می‌شود." },
+  { concept: "ناهم‌زمانی", en: "async / await", text: "منتظر جواب ماندن بدون معطل کردن بقیه؛ مثل گارسونی که پشت میز نمی‌ایستد." },
+  { concept: "بستار", en: "Closure", text: "تابع کوچکی که اطرافش را به یاد دارد؛ جواب دیررس را نادیده می‌گیرد." },
+  { concept: "ترکیب توابع", en: "Compose", text: "پیش‌پردازش تصویر زنجیره‌ای از قطعه‌های کوچک است: تغییر اندازه، سپس تبدیل به عدد." },
+  { concept: "زنجیره‌ی خطا", en: "raise … from", text: "وقتی خطا را به پیام کاربر تبدیل می‌کنیم، علت اصلی گم نمی‌شود." },
 ];
 
 export function PlFeaturesVisual() {
@@ -189,26 +136,25 @@ export function PlFeaturesVisual() {
           <div className="pl-feature-head">
             <span className="pl-feature-num">{fa(i + 1)}</span>
             <div>
-              <b dir="ltr">{f.concept}</b>
-              <small>{f.fa}</small>
+              <b>{f.concept}</b>
+              <small dir="ltr">{f.en}</small>
             </div>
           </div>
-          <Code lang={f.lang} lines={f.code} />
-          <p>{f.note}</p>
+          <p>{f.text}</p>
         </div>
       ))}
       <div className="pl-critique">
-        <b>نقد کد خودم:</b> استنتاج CPU‌بر داخل <bdi dir="ltr">async def</bdi> حلقه‌ی رویداد را مسدود می‌کند؛ بهتر است <bdi dir="ltr">def</bdi> معمولی باشد تا FastAPI آن را در threadpool اجرا کند.
+        <b>نقد صادقانه:</b> محاسبه‌ی سنگین مدل داخل تابع ناهم‌زمان، بقیه‌ی درخواست‌ها را موقتاً معطل می‌کند؛ راه‌حل ساده: تابع معمولی.
       </div>
     </div>
   );
 }
 
 const lessons = [
-  { title: "هر لایه، زبان خودش", text: "پویایی Python برای آزمایش مدل، ایستایی TypeScript برای رابط قابل اعتماد، C++ برای سرعت." },
-  { title: "مرز را در زمان اجرا چک کن", text: "نوع‌ها در JSON پاک می‌شوند؛ Pydantic در سرور، Zod در کلاینت، یا تولید نوع از OpenAPI." },
-  { title: "DSL خوب = نحو آشنا + معنای تخصصی", text: "PyTorch بدون نحو جدید، با Operator Overloading و Autograd، زبان یادگیری عمیق شد." },
-  { title: "نوع، ایمنی دامنه را رمز می‌کند", text: "برچسب تشخیص به‌صورت Literal Type؛ در آینده شکل تانسور به‌صورت نوع." },
+  { title: "هر بخش، زبان خودش", text: "Python برای آزمایش مدل، TypeScript برای رابط قابل‌اعتماد، C++ برای سرعت." },
+  { title: "مرز را دوباره چک کن", text: "برچسب‌ها در شبکه پاک می‌شوند؛ داده‌ی ورودی را همان‌جا بررسی کنید." },
+  { title: "زبان تخصصی خوب", text: "ظاهر آشنا + توانایی تازه؛ PyTorch همان Python است با معنای یادگیری عمیق." },
+  { title: "نوع داده یعنی ایمنی", text: "هر خطایی که پیش از اجرا گرفته شود، به بیمار نمی‌رسد." },
 ];
 
 export function PlLessonsVisual() {

@@ -394,23 +394,19 @@ function MetricsVisual() {
 }
 
 function MiniProjectVisual() {
-  const { confusion, loss, results, architecture } = miniProject;
+  const { confusion, loss, results } = miniProject;
   const maxLoss = 0.25;
   const pts = loss.map((p) => ({ x: 24 + (p.epoch / 100) * 250, y: 22 + (1 - p.value / maxLoss) * 80, ...p }));
   return (
     <div className="v-mini">
-      <div className="v-mini-arch" dir="ltr">
-        {architecture.map((layer, index) => (
-          <span key={`${layer}-${index}`} className={layer === "ReLU" ? "is-act" : ""}>{layer}</span>
-        ))}
-      </div>
+      <p className="v-mini-intro">شبکه‌ی کوچکی که از ۳۰ عدد هر نمونه یاد می‌گیرد سالم است یا بدخیم.</p>
       <div className="v-mini-grid">
         <div className="v-mini-cm">
           <span className="v-mini-caption">ماتریس خطا · ۱۱۴ نمونه‌ی آزمون</span>
           <ConfusionMatrix tp={String(confusion.tp)} fn={String(confusion.fn)} fp={String(confusion.fp)} tn={String(confusion.tn)} numeric />
         </div>
         <div className="v-mini-loss">
-          <span className="v-mini-caption">Training Loss</span>
+          <span className="v-mini-caption">کاهش خطا در طول آموزش</span>
           <svg viewBox="0 0 300 140" aria-label="نمودار کاهش Training Loss">
             <line x1="20" y1="112" x2="290" y2="112" className="v-axis" />
             <polyline points={pts.map((p) => `${p.x},${p.y}`).join(" ")} className="v-loss-line" />
@@ -425,7 +421,7 @@ function MiniProjectVisual() {
                 >
                   {p.value}
                 </text>
-                <text x={p.x} y="130" className="v-loss-ep" textAnchor="middle">epoch {p.epoch}</text>
+                <text x={p.x} y="130" className="v-loss-ep" textAnchor="middle">دور {p.epoch}</text>
               </g>
             ))}
           </svg>
@@ -434,7 +430,7 @@ function MiniProjectVisual() {
       <div className="v-stats">
         {results.map((r) => (
           <div key={r.k} className="v-stat">
-            <small dir="ltr">{r.k}</small>
+            <small>{r.k}</small>
             <strong dir="ltr">{r.v}</strong>
             <span dir="auto">{r.detail}</span>
           </div>
